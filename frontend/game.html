@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>狼人杀游戏房间</title>
+    <link rel="stylesheet" type="text/css" href="css/main.css">
+    <link rel="stylesheet" type="text/css" href="https://www.jeasyui.com/easyui/themes/default/easyui.css">
+    <link rel="stylesheet" type="text/css" href="https://www.jeasyui.com/easyui/themes/icon.css">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" src="https://www.jeasyui.com/easyui/jquery.easyui.min.js"></script>
+    <script type="text/javascript" src="js/game.js"></script>
+</head>
+<body class="easyui-layout">
+    <div data-options="region:'north'" style="height:50px;padding:10px;">
+        <div class="game-status">房间：<span id="roomName"></span> - 状态：<span id="gameStatus">等待开始</span></div>
+        <div class="timer" id="gameTimer"></div>
+    </div>
+    
+    <div data-options="region:'west',split:true" style="width:200px;padding:10px;">
+        <div class="player-list">
+            <h3>玩家列表</h3>
+            <div id="playerContainer"></div>
+        </div>
+    </div>
+    
+    <div data-options="region:'center'">
+        <div class="game-room">
+            <div class="game-controls">
+                <a href="javascript:void(0)" class="easyui-linkbutton" onclick="startGame()">开始游戏</a>
+                <a href="javascript:void(0)" class="easyui-linkbutton" onclick="leaveRoom()">离开房间</a>
+            </div>
+            
+            <div class="vote-panel" id="votePanel" style="display:none;">
+                <h3>投票面板</h3>
+                <div id="voteOptions"></div>
+                <a href="javascript:void(0)" class="easyui-linkbutton" onclick="submitVote()">确认投票</a>
+            </div>
+            
+            <div class="chat-box" id="chatBox"></div>
+            
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" id="chatInput" placeholder="输入消息...">
+                <a href="javascript:void(0)" class="easyui-linkbutton" onclick="sendMessage()">发送</a>
+            </div>
+        </div>
+    </div>
+    
+    <div data-options="region:'east',split:true" style="width:200px;padding:10px;">
+        <div class="player-info">
+            <h3>个人信息</h3>
+            <div id="playerRole" style="display:none;">
+                <p>你的角色：<span id="roleName"></span></p>
+                <p>技能说明：<span id="roleDescription"></span></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
