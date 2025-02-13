@@ -2,7 +2,7 @@ package services
 
 import (
 	"errors"
-	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -131,14 +131,14 @@ func generateRoles(playerCount int, mode models.GameMode) []models.Role {
 	roles := make([]models.Role, 0)
 
 	// 基础角色分配
-	fmt.Printf("开始生成角色列表，玩家数量: %d, 游戏模式: %s\n", playerCount, mode)
+	log.Printf("开始生成角色列表，玩家数量: %d, 游戏模式: %s", playerCount, mode)
 	switch mode {
 	case models.ClassicMode:
 		// 经典模式：狼人2个，预言家1个，女巫1个，其余为村民
 		roles = append(roles, models.Werewolf, models.Werewolf)
 		roles = append(roles, models.Seer)
 		roles = append(roles, models.Witch)
-		fmt.Println("经典模式角色分配：2个狼人，1个预言家，1个女巫")
+		log.Printf("经典模式角色分配：2个狼人，1个预言家，1个女巫")
 
 	case models.StandardMode:
 		// 标准模式：增加猎人和守卫
@@ -147,7 +147,7 @@ func generateRoles(playerCount int, mode models.GameMode) []models.Role {
 		roles = append(roles, models.Witch)
 		roles = append(roles, models.Hunter)
 		roles = append(roles, models.Guard)
-		fmt.Println("标准模式角色分配：2个狼人，1个预言家，1个女巫，1个猎人，1个守卫")
+		log.Printf("标准模式角色分配：2个狼人，1个预言家，1个女巫，1个猎人，1个守卫")
 
 	case models.ExtendedMode:
 		// 扩展模式：增加白狼王和丘比特
@@ -157,7 +157,7 @@ func generateRoles(playerCount int, mode models.GameMode) []models.Role {
 		roles = append(roles, models.Hunter)
 		roles = append(roles, models.Guard)
 		roles = append(roles, models.Cupid)
-		fmt.Println("扩展模式角色分配：1个狼人，1个白狼王，1个预言家，1个女巫，1个猎人，1个守卫，1个丘比特")
+		log.Printf("扩展模式角色分配：1个狼人，1个白狼王，1个预言家，1个女巫，1个猎人，1个守卫，1个丘比特")
 	}
 
 	// 补充村民角色
@@ -165,14 +165,14 @@ func generateRoles(playerCount int, mode models.GameMode) []models.Role {
 	for i := 0; i < villagerCount; i++ {
 		roles = append(roles, models.Villager)
 	}
-	fmt.Printf("补充村民数量: %d\n", villagerCount)
+	log.Printf("补充村民数量: %d", villagerCount)
 
 	return roles
 }
 
 // 分配角色
 func assignRoles(game *GameState) {
-	fmt.Printf("开始分配角色，房间ID: %s, 玩家数量: %d\n", game.Room.ID, len(game.Players))
+	log.Printf("开始分配角色，房间ID: %s, 玩家数量: %d", game.Room.ID, len(game.Players))
 	playerCount := len(game.Players)
 	roles := generateRoles(playerCount, game.Room.Mode)
 
@@ -181,15 +181,15 @@ func assignRoles(game *GameState) {
 	rand.Shuffle(len(roles), func(i, j int) {
 		roles[i], roles[j] = roles[j], roles[i]
 	})
-	fmt.Println("角色顺序已随机打乱")
+	log.Printf("角色顺序已随机打乱")
 
 	// 分配角色给玩家
 	for i := range game.Players {
 		game.Players[i].Role = roles[i]
 		game.Players[i].Alive = true
-		fmt.Printf("玩家 %s (%s) 被分配角色: %s\n", game.Players[i].Name, game.Players[i].ID, roles[i])
+		log.Printf("玩家 %s (%s) 被分配角色: %s", game.Players[i].Name, game.Players[i].ID, roles[i])
 	}
-	fmt.Println("角色分配完成")
+	log.Printf("角色分配完成")
 }
 
 // 获取可用动作

@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -54,6 +55,12 @@ func (gc *GameController) StartGame() error {
 			gc.game.Players = append(gc.game.Players, aiPlayer)
 			gc.game.Room.Players = append(gc.game.Room.Players, aiPlayer)
 		}
+
+		// 广播房间玩家列表更新
+		gc.webSocket.BroadcastToRoom(gc.game.Room.ID, map[string]interface{}{
+			"type":    "room_update",
+			"players": gc.game.Room.Players,
+		})
 	}
 
 	// 设置房间游戏模式和最小玩家数
@@ -227,8 +234,8 @@ func (gc *GameController) handleGameEnd(result string) {
 
 // broadcastGameState 广播游戏状态
 func (gc *GameController) broadcastGameState() {
-	fmt.Printf("[广播游戏状态] 房间ID: %s, 阶段: %s, 回合: %d\n", gc.game.Room.ID, gc.game.Phase, gc.game.Round)
-	fmt.Printf("[广播游戏状态] 存活玩家: %d, 剩余时间: %d秒\n", countAlivePlayers(gc.game.Players), gc.game.TimeLeft)
+	log.Printf("[广播游戏状态] 房间ID: %s, 阶段: %s, 回合: %d", gc.game.Room.ID, gc.game.Phase, gc.game.Round)
+	log.Printf("[广播游戏状态] 存活玩家: %d, 剩余时间: %d秒", countAlivePlayers(gc.game.Players), gc.game.TimeLeft)
 
 	// 构建游戏状态消息
 	gameState := map[string]interface{}{
@@ -241,7 +248,7 @@ func (gc *GameController) broadcastGameState() {
 		"room":       gc.game.Room,
 	}
 
-	fmt.Printf("[广播游戏状态] 发送状态消息: %+v\n", gameState)
+	log.Printf("[广播游戏状态] 发送状态消息: %+v", gameState)
 
 	// 直接广播游戏状态，不需要额外的包装
 	gc.webSocket.BroadcastToRoom(gc.game.Room.ID, gameState)

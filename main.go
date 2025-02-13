@@ -23,9 +23,15 @@ var (
 )
 
 func init() {
+	// 设置日志格式，包含文件名和行号
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
 	webSocketMgr = services.NewWebSocketManager(nil)
 	roomManager = services.NewRoomManager(webSocketMgr)
 	webSocketMgr.SetRoomManager(roomManager)
+
+	// 添加日志记录
+	log.Printf("初始化完成: WebSocket管理器和房间管理器已配置")
 }
 
 func main() {
@@ -71,18 +77,19 @@ func main() {
 			return
 		}
 
-		// 获取房间ID和玩家ID
+		// 获取房间ID、玩家ID和连接ID
 		roomID := c.Query("room")
 		playerID := c.Query("player")
+		connectionID := c.Query("connection_id")
 
-		if roomID == "" || playerID == "" {
+		if roomID == "" || playerID == "" || connectionID == "" {
 			log.Printf("缺少必要的连接参数")
 			ws.Close()
 			return
 		}
 
-		// 注册WebSocket连接
-		webSocketMgr.RegisterConnection(playerID, ws)
+		// 注册WebSocket连接，传入连接ID
+		webSocketMgr.RegisterConnection(playerID, ws, connectionID)
 		webSocketMgr.JoinRoom(roomID, playerID)
 	})
 

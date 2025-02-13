@@ -4,47 +4,76 @@ let currentRoom = null;
 let currentPlayer = null;
 let isConnecting = false;
 let reconnectAttempts = 0;
+let connectionId = null;
 const maxReconnectAttempts = 5;
 const reconnectDelay = 3000;
 
 // 初始化游戏房间
-function initGameRoom() {
-    // 从URL获取参数
-    const urlParams = new URLSearchParams(window.location.search);
-    currentRoom = urlParams.get('room');
-    currentPlayer = {
-        id: urlParams.get('player'),
-        name: localStorage.getItem('playerName')
+// 保存房间和玩家状态到本地存储
+function saveGameState() {
+    const gameState = {
+        room: currentRoom,
+        player: currentPlayer,
+        connectionId: connectionId,
+        timestamp: Date.now()
     };
-    
-    if (!currentRoom || !currentPlayer.id) {
-        $.messager.alert('错误', '缺少必要的房间或玩家信息');
-        return;
-    }
-    
-    // 先验证玩家是否已加入房间
-    fetch(`/api/rooms/${currentRoom}/players/${currentPlayer.id}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('玩家未加入房间');
-            }
-            return response.json();
-        })
-        .then(player => {
-            // 更新房间信息
-            updateRoomInfo();
-            
-            // 初始化WebSocket连接
-            initGameWebSocket();
-            
-            // 绑定事件处理
-            bindGameEvents();
-        })
-        .catch(error => {
-            $.messager.alert('错误', error.message);
-            window.location.href = '/';
-        });
+    localStorage.setItem('gameState', JSON.stringify(gameState));
 }
+
+// 从本地存储恢复游戏状态
+function restoreGameState() {
+    const savedState = localStorage.getItem('gameState');
+    if (savedState) {
+        const gameState = JSON.parse(savedState);
+        // 检查状态是否在24小时内
+        if (Date.now() - gameState.timestamp < 24 * 60 * 60 * 1000) {
+            return gameState;
+        } else {
+            localStorage.removeItem('gameState');
+        }
+    }
+    return null;
+}
+
+// 修改initGameRoom函数
+    // 修改initGameRoom函数
+    function initGameRoom() {
+        // 尝试从URL获取参数
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomId = urlParams.get('room');
+        let playerId = urlParams.get('player');
+        
+        // 如果URL中没有参数，尝试从本地存储恢复
+        if (!roomId || !playerId) {
+            const savedState = restoreGameState();
+            if (savedState) {
+                currentRoom = savedState.room;
+                currentPlayer = savedState.player;
+                // 更新URL，但不刷新页面
+                const newUrl = `${window.location.pathname}?room=${currentRoom}&player=${currentPlayer.id}`;
+                window.history.pushState({ path: newUrl }, '', newUrl);
+            } else {
+                $.messager.alert('错误', '缺少必要的房间或玩家信息');
+                window.location.href = '/';
+                return;
+            }
+        } else {
+            currentRoom = roomId;
+            currentPlayer = {
+                id: playerId,
+                name: localStorage.getItem('playerName')
+            };
+        }
+
+        // 保存当前状态
+        saveGameState();
+        
+        // 直接初始化WebSocket连接，不再通过API验证
+        updateRoomInfo();
+        initGameWebSocket();
+        bindGameEvents();
+    }
+
 
 // 初始化游戏WebSocket连接
 function initGameWebSocket() {
@@ -53,7 +82,12 @@ function initGameWebSocket() {
     }
 
     isConnecting = true;
-    const wsUrl = `ws://${window.location.host}/ws?room=${currentRoom}&player=${currentPlayer.id}`;
+    // 如果没有connectionId，生成一个新的
+    if (!connectionId) {
+        connectionId = generateConnectionId();
+    }
+    
+    const wsUrl = `ws://${window.location.host}/ws?room=${currentRoom}&player=${currentPlayer.id}&connection_id=${connectionId}`;
     
     try {
         gameWs = new WebSocket(wsUrl);
@@ -62,6 +96,8 @@ function initGameWebSocket() {
             console.log('游戏房间WebSocket连接已建立');
             isConnecting = false;
             reconnectAttempts = 0;
+            // 保存包含connectionId的状态
+            saveGameState();
             // 连接成功后更新房间信息
             updateRoomInfo();
         };
@@ -109,6 +145,11 @@ function initGameWebSocket() {
     }
 }
 
+// 生成连接ID
+function generateConnectionId() {
+    return 'conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
 // 处理游戏消息
 function handleGameMessage(message) {
     console.log('收到消息:', message);
@@ -116,6 +157,12 @@ function handleGameMessage(message) {
     try {
         if (!message || !message.type) {
             console.error('无效的消息格式:', message);
+            return;
+        }
+        
+        // 直接处理room_update类型的消息
+        if (message.type === 'room_update' && message.players) {
+            updatePlayerList(message.players);
             return;
         }
         
@@ -128,6 +175,9 @@ function handleGameMessage(message) {
                 break;
             case 'error':
                 $.messager.alert('错误', message.content.message);
+                break;
+            case 'chat':
+                appendChatMessage(message);
                 break;
             default:
                 console.warn('未知的消息类型:', message.type);

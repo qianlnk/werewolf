@@ -3,7 +3,6 @@ package services
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -14,10 +13,42 @@ import (
 
 // WebSocketManager WebSocket连接管理器
 type WebSocketManager struct {
-	connections map[string]*websocket.Conn // playerID -> connection
-	rooms       map[string][]string        // roomID -> []playerID
-	mutex       sync.RWMutex
-	roomManager *RoomManager
+	connections   map[string]*websocket.Conn // playerID -> connection
+	connectionIDs map[string]string          // playerID -> connectionID
+	rooms         map[string][]string        // roomID -> []playerID
+	mutex         sync.RWMutex
+	roomManager   *RoomManager
+}
+
+// NewWebSocketManager 创建WebSocket管理器实例
+func NewWebSocketManager(rm *RoomManager) *WebSocketManager {
+	return &WebSocketManager{
+		connections:   make(map[string]*websocket.Conn),
+		connectionIDs: make(map[string]string),
+		rooms:         make(map[string][]string),
+		roomManager:   rm,
+	}
+}
+
+// RegisterConnection 注册新的WebSocket连接
+func (wm *WebSocketManager) RegisterConnection(playerID string, conn *websocket.Conn, connectionID string) {
+	wm.mutex.Lock()
+	defer wm.mutex.Unlock()
+
+	// 检查并清理该玩家的所有旧连接
+	if oldConn, exists := wm.connections[playerID]; exists {
+		// 直接关闭旧连接
+		oldConn.Close()
+		delete(wm.connections, playerID)
+		delete(wm.connectionIDs, playerID)
+	}
+
+	// 保存新连接和连接ID
+	wm.connections[playerID] = conn
+	wm.connectionIDs[playerID] = connectionID
+
+	// 启动消息处理协程
+	go wm.handleMessages(playerID, conn)
 }
 
 // Message WebSocket消息结构
@@ -27,34 +58,25 @@ type Message struct {
 	Content interface{} `json:"content"`
 }
 
-// NewWebSocketManager 创建WebSocket管理器实例
-func NewWebSocketManager(rm *RoomManager) *WebSocketManager {
-	return &WebSocketManager{
-		connections: make(map[string]*websocket.Conn),
-		rooms:       make(map[string][]string),
-		roomManager: rm,
-	}
-}
-
-// RegisterConnection 注册新的WebSocket连接
-func (wm *WebSocketManager) RegisterConnection(playerID string, conn *websocket.Conn) {
-	wm.mutex.Lock()
-	defer wm.mutex.Unlock()
-
-	wm.connections[playerID] = conn
-
-	// 启动消息处理协程
-	go wm.handleMessages(playerID, conn)
-}
-
 // JoinRoom 将玩家加入房间的WebSocket广播组
 func (wm *WebSocketManager) JoinRoom(roomID, playerID string) {
 	wm.mutex.Lock()
 	defer wm.mutex.Unlock()
 
+	// 检查房间是否存在
 	if _, exists := wm.rooms[roomID]; !exists {
 		wm.rooms[roomID] = make([]string, 0)
 	}
+
+	// 检查玩家是否已在房间中
+	for _, pid := range wm.rooms[roomID] {
+		if pid == playerID {
+			// 玩家已在房间中，直接返回
+			return
+		}
+	}
+
+	// 玩家不在房间中，添加到房间
 	wm.rooms[roomID] = append(wm.rooms[roomID], playerID)
 
 	// 广播房间成员更新消息
@@ -71,12 +93,12 @@ func (wm *WebSocketManager) JoinRoom(roomID, playerID string) {
 
 // BroadcastToRoom 向房间内所有玩家广播消息
 func (wm *WebSocketManager) BroadcastToRoom(roomID string, message interface{}) {
-	fmt.Printf("[WebSocket广播] 开始向房间 %s 广播消息\n", roomID)
+	log.Printf("[WebSocket广播] 开始向房间 %s 广播消息, %v", roomID, message)
 
 	// 序列化消息
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
-		fmt.Printf("[WebSocket广播] 消息序列化失败: %v\n", err)
+		log.Printf("[WebSocket广播] 消息序列化失败: %v", err)
 		return
 	}
 
@@ -85,7 +107,7 @@ func (wm *WebSocketManager) BroadcastToRoom(roomID string, message interface{}) 
 	playerIDs, exists := wm.rooms[roomID]
 	if !exists {
 		wm.mutex.RUnlock()
-		fmt.Printf("[WebSocket广播] 房间 %s 不存在\n", roomID)
+		log.Printf("[WebSocket广播] 房间 %s 不存在", roomID)
 		return
 	}
 
@@ -98,17 +120,17 @@ func (wm *WebSocketManager) BroadcastToRoom(roomID string, message interface{}) 
 	}
 	wm.mutex.RUnlock()
 
-	fmt.Printf("[WebSocket广播] 房间 %s 中有 %d 个活跃连接\n", roomID, len(connections))
+	log.Printf("[WebSocket广播] 房间 %s 中有 %d 个活跃连接", roomID, len(connections))
 
 	// 向每个连接发送消息
 	for _, conn := range connections {
 		if err := conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
-			fmt.Printf("[WebSocket广播] 向连接发送消息失败: %v\n", err)
+			log.Printf("[WebSocket广播] 向连接发送消息失败: %v", err)
 			continue
 		}
 	}
 
-	fmt.Printf("[WebSocket广播] 消息广播完成\n")
+	log.Printf("[WebSocket广播] 消息广播完成")
 }
 
 // SendToPlayer 向指定玩家发送消息
@@ -222,6 +244,9 @@ func (wm *WebSocketManager) checkConnection(conn *websocket.Conn) error {
 	return nil
 }
 
+// 添加延迟清理的时间常量
+const playerCleanupDelay = 30 * time.Second
+
 // RemoveConnection 移除WebSocket连接
 func (wm *WebSocketManager) RemoveConnection(playerID string) {
 	wm.mutex.Lock()
@@ -246,28 +271,46 @@ func (wm *WebSocketManager) RemoveConnection(playerID string) {
 
 	// 从连接映射中删除
 	delete(wm.connections, playerID)
+	delete(wm.connectionIDs, playerID)
 
 	// 确保连接被关闭
 	conn.Close()
 
-	// 从所有房间中移除玩家
-	for roomID, players := range wm.rooms {
-		for i, pid := range players {
-			if pid == playerID {
-				wm.rooms[roomID] = append(players[:i], players[i+1:]...)
-				// 广播玩家离开消息
-				go wm.broadcastPlayerLeft(roomID, playerID)
-				break
+	// 设置一个重连窗口期，避免页面刷新时立即清理房间和玩家信息
+	go func() {
+		// 等待30秒，给玩家重连的机会
+		time.Sleep(30 * time.Second)
+
+		wm.mutex.Lock()
+		defer wm.mutex.Unlock()
+
+		// 检查玩家是否已经重新连接
+		if _, reconnected := wm.connections[playerID]; reconnected {
+			return
+		}
+
+		// 如果玩家没有重连，则清理房间信息
+		for roomID, players := range wm.rooms {
+			for i, pid := range players {
+				if pid == playerID {
+					// 广播玩家离开消息
+					go wm.broadcastPlayerLeft(roomID, playerID)
+					// 从房间中移除玩家
+					wm.rooms[roomID] = append(players[:i], players[i+1:]...)
+					break
+				}
+			}
+
+			// 如果房间为空，清理房间
+			if len(wm.rooms[roomID]) == 0 {
+				delete(wm.rooms, roomID)
 			}
 		}
 
-		// 如果房间为空，清理房间
-		if len(wm.rooms[roomID]) == 0 {
-			delete(wm.rooms, roomID)
-		}
-	}
+		log.Printf("玩家 %s 未在重连窗口期内重连，已清理房间资源", playerID)
+	}()
 
-	log.Printf("已清理玩家 %s 的连接资源", playerID)
+	log.Printf("已清理玩家 %s 的连接资源，等待重连窗口期", playerID)
 }
 
 // broadcastPlayerLeft 广播玩家离开消息
@@ -315,31 +358,22 @@ func (wm *WebSocketManager) isPlayerInRoom(roomID, playerID string) bool {
 // handleMessages 处理接收到的WebSocket消息
 func (wm *WebSocketManager) handleMessages(playerID string, conn *websocket.Conn) {
 	// 设置连接参数
-	conn.SetReadLimit(512 * 1024)                         // 设置最大消息大小为512KB
-	conn.SetReadDeadline(time.Now().Add(time.Minute * 5)) // 设置读取超时
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(time.Minute * 5))
-		return nil
-	})
-
-	// 启动心跳检测
-	go wm.startPingHandler(playerID, conn)
+	conn.SetReadLimit(512 * 1024) // 设置最大消息大小为512KB
 
 	for {
 		// 读取消息
 		_, p, err := conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err,
-				websocket.CloseGoingAway,
-				websocket.CloseNormalClosure) {
-				log.Printf("读取消息失败: %v", err)
+			// 检查是否是正常的连接关闭
+			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				log.Printf("连接正常关闭: %v", err)
+				break // 直接退出消息处理循环，不调用RemoveConnection
 			}
+			// 处理意外的连接关闭
+			log.Printf("读取消息失败: %v", err)
 			wm.RemoveConnection(playerID)
 			break
 		}
-
-		// 重置读取超时
-		conn.SetReadDeadline(time.Now().Add(time.Minute * 5))
 
 		// 解析消息
 		var msg Message

@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"time"
 
@@ -93,6 +94,15 @@ func (rm *RoomManager) JoinRoom(roomID string, player models.Player) error {
 		return ErrRoomFull
 	}
 
+	// 检查玩家是否已在房间中
+	for _, p := range room.Players {
+		if p.ID == player.ID {
+			// 玩家已在房间中，更新玩家信息
+			p.Name = player.Name
+			return nil
+		}
+	}
+
 	room.Players = append(room.Players, player)
 
 	// 更新游戏控制器中的玩家信息
@@ -129,6 +139,7 @@ func (rm *RoomManager) GetPlayer(roomID string, playerID string) (*models.Player
 		return nil, ErrRoomNotFound
 	}
 
+	log.Printf("room: %v", room.Players)
 	for _, player := range room.Players {
 		if player.ID == playerID {
 			return &player, nil

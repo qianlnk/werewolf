@@ -51,7 +51,13 @@ func (gs *GameState) StartGame() error {
 	// 初始化技能状态
 	gs.initializeSkills()
 
+	// 初始化游戏状态
+	gs.Phase = PhaseNight
+	gs.Round = 1
+	gs.TimeLeft = 120
 	gs.IsStarted = true
+	gs.Actions = make([]models.GameAction, 0)
+
 	return nil
 }
 
