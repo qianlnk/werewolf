@@ -12,7 +12,7 @@
 </head>
 <body class="easyui-layout">
     <div data-options="region:'north'" style="height:50px;padding:10px;">
-        <div class="game-status">房间：<span id="roomName"></span> - 状态：<span id="gameStatus">等待开始</span></div>
+        <div class="game-status">房间：<span id="roomName">等待加入...</span> - 状态：<span id="gameStatus">未开始</span></div>
         <div class="timer" id="gameTimer"></div>
     </div>
     
@@ -26,8 +26,8 @@
     <div data-options="region:'center'">
         <div class="game-room">
             <div class="game-controls">
-                <a href="javascript:void(0)" class="easyui-linkbutton" onclick="startGame()">开始游戏</a>
-                <a href="javascript:void(0)" class="easyui-linkbutton" onclick="leaveRoom()">离开房间</a>
+                <a href="javascript:void(0)" class="easyui-linkbutton" id="startGameBtn" onclick="startGame()">开始游戏</a>
+                <a href="javascript:void(0)" class="easyui-linkbutton" id="leaveRoomBtn" onclick="leaveRoom()">离开房间</a>
             </div>
             
             <div class="vote-panel" id="votePanel" style="display:none;">
@@ -48,9 +48,12 @@
     <div data-options="region:'east',split:true" style="width:200px;padding:10px;">
         <div class="player-info">
             <h3>个人信息</h3>
-            <div id="playerRole" style="display:none;">
-                <p>你的角色：<span id="roleName"></span></p>
-                <p>技能说明：<span id="roleDescription"></span></p>
+            <div id="playerRole">
+                <p>当前状态：<span id="playerStatus"></span></p>
+                <div class="role-info">
+                    <p>你的角色：<span id="roleName"></span></p>
+                    <p>技能说明：<span id="roleDescription"></span></p>
+                </div>
             </div>
         </div>
     </div>

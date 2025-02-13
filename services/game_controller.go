@@ -41,6 +41,10 @@ func (gc *GameController) StartGame() error {
 
 	// 检查是否需要补充AI玩家
 	if len(gc.game.Players) < 6 {
+		// 保存现有玩家
+		existingPlayers := make([]models.Player, len(gc.game.Players))
+		copy(existingPlayers, gc.game.Players)
+
 		// 计算需要补充的AI玩家数量
 		aiCount := 6 - len(gc.game.Players)
 		// 创建AI玩家
@@ -52,8 +56,18 @@ func (gc *GameController) StartGame() error {
 				Alive: true,
 				Role:  models.Villager, // 初始设置为村民，后续会在分配角色时被重新设置
 			}
-			gc.game.Players = append(gc.game.Players, aiPlayer)
-			gc.game.Room.Players = append(gc.game.Room.Players, aiPlayer)
+			existingPlayers = append(existingPlayers, aiPlayer)
+		}
+
+		// 更新游戏和房间的玩家列表
+		gc.game.Players = existingPlayers
+		gc.game.Room.Players = existingPlayers
+
+		// 更新房间管理器中的房间信息，确保AI玩家信息持久化
+		if gc.game.roomManager != nil {
+			if room, exists := gc.game.roomManager.rooms[gc.game.Room.ID]; exists {
+				room.Players = existingPlayers
+			}
 		}
 
 		// 广播房间玩家列表更新
@@ -67,14 +81,33 @@ func (gc *GameController) StartGame() error {
 	gc.game.Room.Mode = models.ClassicMode
 	gc.game.Room.MinPlayers = 6
 
+	// 启动游戏并分配角色
 	if err := gc.game.StartGame(); err != nil {
 		return err
 	}
 
+	// 确保游戏状态已更新
+	gc.game.IsStarted = true
+
+	// 向每个玩家单独发送其角色信息
+	for _, player := range gc.game.Players {
+		gc.webSocket.SendToPlayer(player.ID, map[string]interface{}{
+			"type":    "role_assigned",
+			"role":    player.Role,
+			"message": "游戏开始，你的角色是：" + string(player.Role),
+		})
+	}
+
+	// 广播游戏开始消息，但不包含角色信息
+	gc.webSocket.BroadcastToRoom(gc.game.Room.ID, map[string]interface{}{
+		"type":    "game_started",
+		"message": "游戏已开始",
+	})
+
 	// 启动游戏计时器
 	gc.startPhaseTimer()
 
-	// 广播游戏开始消息
+	// 广播游戏状态
 	gc.broadcastGameState()
 
 	return nil

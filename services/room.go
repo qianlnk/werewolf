@@ -49,7 +49,7 @@ func (rm *RoomManager) CreateRoom(name string, mode models.GameMode, maxPlayers 
 	rm.rooms[room.ID] = room
 
 	// 初始化游戏状态和控制器
-	gameState := NewGameState(*room)
+	gameState := NewGameState(*room, rm)
 	gameController := NewGameController(gameState, rm.webSocketMgr) // 传入WebSocket管理器实例
 	rm.games[room.ID] = gameController
 

@@ -160,13 +160,14 @@ function handleGameMessage(message) {
             return;
         }
         
-        // 直接处理room_update类型的消息
-        if (message.type === 'room_update' && message.players) {
-            updatePlayerList(message.players);
-            return;
-        }
-        
         switch(message.type) {
+            case 'role_assigned':
+                // 处理角色分配消息
+                $('.role-info').show();
+                $('#roleName').text(message.role);
+                $('#roleDescription').text(message.description || message.message);
+                $('#playerStatus').text('存活');
+                break;
             case 'broadcast':
                 handleBroadcastMessage(message.content);
                 break;
@@ -178,6 +179,27 @@ function handleGameMessage(message) {
                 break;
             case 'chat':
                 appendChatMessage(message);
+                break;
+            case 'game_started':
+                // 处理游戏开始消息
+                $('#startGameBtn').hide(); // 隐藏开始游戏按钮
+                $('#gameStatus').text('游戏进行中'); // 更新游戏状态
+                updateRoomInfo(); // 更新房间信息
+                break;
+            case 'game_state':
+                // 处理游戏状态更新
+                updateGameState(message);
+                if (message.players) {
+                    updatePlayerList(message.players);
+                }
+                break;
+            case 'room_update':
+                // 直接处理房间更新消息
+                if (message.content && message.content.players) {
+                    updatePlayerList(message.content.players);
+                } else if (message.players) {
+                    updatePlayerList(message.players);
+                }
                 break;
             default:
                 console.warn('未知的消息类型:', message.type);
@@ -191,16 +213,20 @@ function handleGameMessage(message) {
 function handleBroadcastMessage(content) {
     switch(content.type) {
         case 'game_state':
-            updateGameState(content);
+            updateGameState(content.data || content);
             break;
         case 'chat':
             appendChatMessage(content);
             break;
         case 'room_update':
-        case 'player_left':
             if (content.players) {
                 updatePlayerList(content.players);
+            } else if (content.data && content.data.players) {
+                updatePlayerList(content.data.players);
             }
+            break;
+        case 'player_left':
+            updateRoomInfo(); // 重新获取完整的房间信息
             break;
     }
 }
@@ -233,15 +259,26 @@ function updatePlayerList(players) {
     const container = $('#playerContainer');
     container.empty();
     
+    if (!Array.isArray(players)) {
+        console.error('无效的玩家列表数据:', players);
+        return;
+    }
+    
     players.forEach(player => {
+        if (!player || !player.id) {
+            console.warn('无效的玩家数据:', player);
+            return;
+        }
+        
         const isCurrentPlayer = player.id === currentPlayer.id;
         const playerCard = $('<div>')
             .addClass('player-card')
             .addClass(player.alive === false ? 'dead' : 'alive')
             .addClass(isCurrentPlayer ? 'current-player' : '')
             .html(`
-                <div class="player-name">${player.name}${isCurrentPlayer ? ' (你)' : ''}</div>
+                <div class="player-name">${player.name || '未知玩家'}${isCurrentPlayer ? ' (你)' : ''}</div>
                 ${player.role && (isCurrentPlayer || !player.alive) ? `<div class="player-role">角色: ${player.role}</div>` : ''}
+                <div class="player-status">状态: ${player.alive === false ? '已死亡' : (player.status || '存活')}</div>
             `);
         container.append(playerCard);
     });
@@ -249,12 +286,27 @@ function updatePlayerList(players) {
 
 // 更新游戏状态
 function updateGameState(state) {
-    $('#gameStatus').text(state.phase || '等待开始');
+    let statusText = state.status || '等待开始';
+    if (state.phase) {
+        statusText = state.phase === 'day' ? '白天阶段' : '黑夜阶段';
+        if (state.round) {
+            statusText = `第${state.round}轮 - ${statusText}`;
+        }
+    }
+    $('#gameStatus').text(statusText);
     if (state.time_left) {
         $('#gameTimer').text(`剩余时间: ${state.time_left}秒`);
     }
     if (state.players) {
         updatePlayerList(state.players);
+        // 更新当前玩家的角色信息
+        const currentPlayerInfo = state.players.find(p => p.id === currentPlayer.id);
+        if (currentPlayerInfo && currentPlayerInfo.role) {
+            updatePlayerRole({
+                name: currentPlayerInfo.role,
+                description: currentPlayerInfo.role_description || ''
+            });
+        }
     }
 }
 

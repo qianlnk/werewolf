@@ -10,29 +10,31 @@ import (
 
 // GameState 游戏状态
 type GameState struct {
-	RoomID    string                  `json:"room_id"`
-	Room      models.Room             `json:"room"`
-	Players   []models.Player         `json:"players"`
-	Phase     string                  `json:"phase"`
-	Round     int                     `json:"round"`
-	Actions   []models.GameAction     `json:"actions"`
-	TimeLeft  int                     `json:"time_left"`
-	IsStarted bool                    `json:"is_started"`
-	Skills    map[string]*WitchSkills `json:"skills"` // 玩家技能状态
-	mutex     sync.RWMutex
+	RoomID      string                  `json:"room_id"`
+	Room        models.Room             `json:"room"`
+	Players     []models.Player         `json:"players"`
+	Phase       string                  `json:"phase"`
+	Round       int                     `json:"round"`
+	Actions     []models.GameAction     `json:"actions"`
+	TimeLeft    int                     `json:"time_left"`
+	IsStarted   bool                    `json:"is_started"`
+	Skills      map[string]*WitchSkills `json:"skills"` // 玩家技能状态
+	mutex       sync.RWMutex
+	roomManager *RoomManager
 }
 
 // NewGameState 创建游戏状态实例
-func NewGameState(room models.Room) *GameState {
+func NewGameState(room models.Room, rm *RoomManager) *GameState {
 	return &GameState{
-		Room:      room,
-		Players:   room.Players,
-		Phase:     PhaseNight,
-		Round:     1,
-		Actions:   make([]models.GameAction, 0),
-		TimeLeft:  120, // 每个阶段默认120秒
-		IsStarted: false,
-		Skills:    make(map[string]*WitchSkills),
+		Room:        room,
+		Players:     room.Players,
+		Phase:       PhaseNight,
+		Round:       1,
+		Actions:     make([]models.GameAction, 0),
+		TimeLeft:    120, // 每个阶段默认120秒
+		IsStarted:   false,
+		Skills:      make(map[string]*WitchSkills),
+		roomManager: rm,
 	}
 }
 
